@@ -69,7 +69,39 @@ class SoapClient:
             Dictionary describing the expected input parameters
         """
         try:
-            operation = self.client.service._operations[operation_name]
-            return operation.input.signature()
-        except KeyError:
-            raise ValueError(f"Operation {operation_name} not found")
+            # Step 1: Get the service binding
+            # Convert odict_values to list first, then get the first service
+            services = list(self.client.wsdl.services.values())
+            if not services:
+                raise ValueError("No services found in WSDL")
+            service = services[0]
+            
+            # Step 2: Get the first port
+            # Convert ports to list first
+            ports = list(service.ports.values())
+            if not ports:
+                raise ValueError("No ports found in service")
+            port = ports[0]
+            
+            # Step 3: Get the operation from the binding
+            if operation_name not in port.binding._operations:
+                raise ValueError(f"Operation {operation_name} not found in binding")
+            operation = port.binding._operations[operation_name]
+            
+            # Step 4: Get the input message parts
+            if not operation.input or not operation.input.body or not operation.input.body.type:
+                raise ValueError("Operation input type information not available")
+                
+            input_parts = {}
+            # Some WSDL might have elements differently structured
+            if hasattr(operation.input.body.type, 'elements'):
+                for name, element in operation.input.body.type.elements:
+                    input_parts[name] = str(element.type)
+            else:
+                # Fallback to getting type directly
+                input_parts[operation.input.body.type.name] = str(operation.input.body.type)
+            
+            return input_parts
+            
+        except Exception as e:
+            raise ValueError(f"Could not get input type for operation {operation_name}: {str(e)}")
